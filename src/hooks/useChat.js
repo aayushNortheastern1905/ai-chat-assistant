@@ -39,7 +39,6 @@ export const useChat = () => {
     } catch (err) {
       console.error('Failed to load chats:', err);
       setError('Failed to load saved chats. Starting fresh.');
-      // Clear corrupted data
       try {
         localStorage.removeItem('chats');
       } catch (e) {
@@ -53,7 +52,6 @@ export const useChat = () => {
     if (!storageAvailable.current || chats.length === 0) return;
 
     try {
-      // Check storage quota
       const quotaCheck = checkStorageQuota();
       if (!quotaCheck.available) {
         setError(quotaCheck.error);
@@ -74,7 +72,6 @@ export const useChat = () => {
   }, [chats]);
 
   const createNewChat = () => {
-    // Check chat limit
     if (chats.length >= VALIDATION_RULES.MAX_CHATS) {
       setError(`Maximum ${VALIDATION_RULES.MAX_CHATS} chats allowed. Please delete some old chats.`);
       return;
@@ -93,6 +90,8 @@ export const useChat = () => {
   };
 
   const sendMessage = async (messageText) => {
+    console.log('🔵 sendMessage called with:', messageText);
+    
     // Validate message
     const validation = validateMessage(messageText);
     if (!validation.valid) {
@@ -108,34 +107,57 @@ export const useChat = () => {
     }
     lastRequestTime.current = now;
 
-    // Create new chat if none exists
-    if (!currentChatId) {
-      createNewChat();
-      return;
-    }
-
     // Prevent concurrent requests
     if (isLoading) {
       setError('Please wait for the current response to complete.');
       return;
     }
 
+    // Create new chat if none exists and process message
+    if (!currentChatId) {
+      console.log('🔵 No chat exists, creating one and sending message...');
+      const newChatId = generateId();
+      const newChat = {
+        id: newChatId,
+        title: validation.message.substring(0, 30),
+        messages: [],
+        createdAt: Date.now()
+      };
+      
+      setChats([newChat, ...chats]);
+      setCurrentChatId(newChatId);
+      
+      // Process the message with the new chat ID
+      await processMessage(newChatId, validation.message);
+      return;
+    }
+
+    // Process message with existing chat
+    await processMessage(currentChatId, validation.message);
+  };
+
+  // Helper function to process and send message
+  const processMessage = async (chatId, messageText) => {
+    console.log('🔵 Processing message for chat:', chatId);
+    
     const userMessage = {
       id: generateId(),
-      text: validation.message,
+      text: messageText,
       sender: 'user',
       timestamp: Date.now()
     };
 
+    console.log('🔵 Adding user message to chat');
+    
     // Add user message
     setChats(prevChats =>
       prevChats.map(chat =>
-        chat.id === currentChatId
+        chat.id === chatId
           ? {
               ...chat,
               messages: [...chat.messages, userMessage],
               title: chat.messages.length === 0 
-                ? validation.message.substring(0, 30) 
+                ? messageText.substring(0, 30) 
                 : chat.title
             }
           : chat
@@ -146,7 +168,9 @@ export const useChat = () => {
     setError(null);
 
     try {
-      const aiResponse = await sendMessageToAI(validation.message);
+      console.log('🔵 Calling AI API...');
+      const aiResponse = await sendMessageToAI(messageText);
+      console.log('🟢 AI Response received:', aiResponse.substring(0, 50) + '...');
       
       const aiMessage = {
         id: generateId(),
@@ -155,20 +179,22 @@ export const useChat = () => {
         timestamp: Date.now()
       };
 
+      console.log('🟢 Adding AI message to chat');
       setChats(prevChats =>
         prevChats.map(chat =>
-          chat.id === currentChatId
+          chat.id === chatId
             ? { ...chat, messages: [...chat.messages, aiMessage] }
             : chat
         )
       );
     } catch (err) {
+      console.log('🔴 AI Error:', err.message);
       setError(err.message);
       
       // Remove user message if request failed
       setChats(prevChats =>
         prevChats.map(chat =>
-          chat.id === currentChatId
+          chat.id === chatId
             ? { 
                 ...chat, 
                 messages: chat.messages.filter(msg => msg.id !== userMessage.id) 
