@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import { useChat } from './hooks/useChat';
@@ -12,23 +12,33 @@ function App() {
     createNewChat,
     sendMessage,
     switchChat,
-    deleteChat
+    deleteChat,
+    clearCurrentChat  // NEW: Import clear function
   } = useChat();
 
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+  const closeSidebar = () => setSidebarOpen(false);
+
   return (
-    <div className="flex h-screen bg-gray-950 text-white">
+    <div className="flex h-screen bg-[#fefdfb] overflow-hidden">
       <Sidebar
         chats={chats}
         currentChatId={currentChat?.id}
         onNewChat={createNewChat}
         onSelectChat={switchChat}
         onDeleteChat={deleteChat}
+        isOpen={sidebarOpen}
+        onClose={closeSidebar}
       />
       <ChatArea
         chat={currentChat}
         isLoading={isLoading}
         error={error}
         onSendMessage={sendMessage}
+        onToggleSidebar={toggleSidebar}
+        onClearChat={clearCurrentChat}  // NEW: Pass clear function
       />
     </div>
   );
